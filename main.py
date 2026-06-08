@@ -27,17 +27,17 @@ def load_channels():
         with open(DATA_FILE, 'r') as f:
             try:
                 data = json.load(f)
-                return data.get("channels",[])
+                return data.get("channels", [])
             except:
                 return []
-    return[]
+    return []
 
 def add_channel(channel_id):
     channels = load_channels()
     if channel_id not in channels:
         channels.append(channel_id)
         with open(DATA_FILE, 'w') as f:
-            json.dump({"channels": channels}, f)
+            json.dump({"channels": channels}, f, indent=4)
         return True
     return False
 
@@ -46,7 +46,7 @@ def remove_channel(channel_id):
     if channel_id in channels:
         channels.remove(channel_id)
         with open(DATA_FILE, 'w') as f:
-            json.dump({"channels": channels}, f)
+            json.dump({"channels": channels}, f, indent=4)
         return True
     return False
 
@@ -121,7 +121,11 @@ def handle_newpost(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('select_'))
 def handle_channel_selection(call):
     if not is_admin(call):
+        bot.answer_callback_query(call.id, "❌ আপনি এই বটের অ্যাডমিন নন।", show_alert=True)
         return
+    
+    # লোডিং অ্যানিমেশন বন্ধ করার জন্য
+    bot.answer_callback_query(call.id)
         
     selected_channel = call.data.replace('select_', '')
     
@@ -145,17 +149,17 @@ def process_media(message):
         
     if message.content_type == 'text':
         user_data[message.chat.id]['type'] = 'text'
-        user_data[message.chat.id]['content'] = message.text
+        user_data[message.chat.id]['content'] = message.html_text
         
     elif message.content_type == 'photo':
         user_data[message.chat.id]['type'] = 'photo'
         user_data[message.chat.id]['file_id'] = message.photo[-1].file_id 
-        user_data[message.chat.id]['content'] = message.caption if message.caption else ""
+        user_data[message.chat.id]['content'] = message.html_caption if message.html_caption else ""
         
     elif message.content_type == 'video':
         user_data[message.chat.id]['type'] = 'video'
         user_data[message.chat.id]['file_id'] = message.video.file_id
-        user_data[message.chat.id]['content'] = message.caption if message.caption else ""
+        user_data[message.chat.id]['content'] = message.html_caption if message.html_caption else ""
     else:
         msg = bot.reply_to(message, "⚠️ এই ফরম্যাটটি সাপোর্ট করে না। দয়া করে টেক্সট, ছবি বা ভিডিও দিন।")
         bot.register_next_step_handler(msg, process_media)
@@ -178,7 +182,7 @@ def process_buttons(message):
         
     markup = InlineKeyboardMarkup(row_width=1)
     
-    if message.text.lower() != 'skip':
+    if message.text and message.text.lower() != 'skip':
         try:
             lines = message.text.split('\n')
             for line in lines:
@@ -201,12 +205,15 @@ def process_buttons(message):
         except Exception as e:
             bot.reply_to(message, "⚠️ বাটনের ফরম্যাটে সমস্যা হয়েছে। বাটন ছাড়া পাঠানো হচ্ছে।")
 
-    channel_id = user_data[message.chat.id].get('selected_channel')
-    post_type = user_data[message.chat.id].get('type')
-    post_content = user_data[message.chat.id].get('content')
+    # সেশন ডেটা নিরাপদ উপায়ে রিড করা
+    chat_data = user_data.get(message.chat.id, {})
+    channel_id = chat_data.get('selected_channel')
+    post_type = chat_data.get('type')
+    post_content = chat_data.get('content')
+    file_id = chat_data.get('file_id')
     
-    if not channel_id:
-        bot.reply_to(message, "❌ চ্যানেল খুঁজে পাওয়া যায়নি। আবার /newpost কমান্ড দিন।")
+    if not channel_id or not post_type:
+        bot.reply_to(message, "❌ সেশন শেষ হয়ে গেছে বা কোনো ভুল হয়েছে। অনুগ্রহ করে আবার `/newpost` দিন।", parse_mode='Markdown')
         return
         
     try:
@@ -214,17 +221,19 @@ def process_buttons(message):
             bot.send_message(chat_id=channel_id, text=post_content, reply_markup=markup, parse_mode='HTML')
             
         elif post_type == 'photo':
-            file_id = user_data[message.chat.id]['file_id']
             bot.send_photo(chat_id=channel_id, photo=file_id, caption=post_content, reply_markup=markup, parse_mode='HTML')
             
         elif post_type == 'video':
-            file_id = user_data[message.chat.id]['file_id']
             bot.send_video(chat_id=channel_id, video=file_id, caption=post_content, reply_markup=markup, parse_mode='HTML')
             
         bot.reply_to(message, f"🎉 **সফল!** আপনার পোস্টটি সফলভাবে `{channel_id}` চ্যানেলে পাবলিশ করা হয়েছে।", parse_mode='Markdown')
         
+        # সফল পোস্টের পর সাময়িক ডেটা ডিলিট করে দেওয়া
+        if message.chat.id in user_data:
+            del user_data[message.chat.id]
+        
     except telebot.apihelper.ApiTelegramException as e:
-        bot.reply_to(message, f"❌ **পোস্ট পাঠানো যায়নি!**\n\n*(Error: {e.description})*\n\nদয়া করে চেক করুন বটটি ওই চ্যানেলে অ্যাডমিন আছে কিনা।", parse_mode='Markdown')
+        bot.reply_to(message, f"❌ **পোস্ট পাঠানো যায়নি!**\n\n*(Error: {e.description})*\n\nদয়া করে চেক করুন বটটি ওই চ্যানেলে অ্যাডমিন আছে কিনা এবং পোস্টের মেসেজ ফরম্যাটটি সঠিক আছে কিনা।", parse_mode='Markdown')
     except Exception as e:
         bot.reply_to(message, f"❌ একটি অজানা ত্রুটি হয়েছে: {e}")
 
