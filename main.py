@@ -13,24 +13,33 @@ def home():
     return "Bot is running!"
 
 def run_flask():
-    # Render নিজে থেকেই একটি PORT অ্যাসাইন করে, তা না পেলে ডিফল্ট ৮০৮০ ব্যবহার হবে
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# আপনার বটের টোকেন (নিরাপত্তার জন্য এটি Environment Variable-এ রাখা ভালো)
+# আপনার বটের টোকেন (Environment Variable থেকে নেওয়া ভালো)
 TOKEN = os.getenv("BOT_TOKEN", "8338804278:AAGAIJE02dT8zW7vX35ynlqPpcmoxjBe_bs")
 bot = telebot.TeleBot(TOKEN)
 
-# অ্যাডমিন ইউজারনেম
+# আপনার টেলিগ্রাম অ্যাকাউন্টের Numeric User ID দিন (এটি দিলে ইউজারনেম পরিবর্তন করলেও সমস্যা হবে না)
+# আপনার আইডি পেতে টেলিগ্রামে @userinfobot এ গিয়ে স্টার্ট দিন।
+ADMIN_ID = None  # উদাহরণ: 123456789 (এখানে আপনার সংখ্যাযুক্ত আইডি দিন)
+
+# ব্যাকআপ হিসেবে অ্যাডমিন ইউজারনেমও রাখা হলো
 ADMIN_USERNAME = "SUNNY_BRO1"
 
 # চ্যানেল সেভ রাখার জন্য ডাটাবেস ফাইল
 DATA_FILE = "bot_data.json"
 user_data = {}
 
-# অ্যাডমিন কি না তা চেক করার ফাংশন
+# অ্যাডমিন কি না তা চেক করার উন্নত ফাংশন
 def is_admin(message_or_call):
+    user_id = message_or_call.from_user.id
     username = message_or_call.from_user.username
+    
+    # প্রথমে আইডি দিয়ে চেক করা হবে (যদি আইডি সেট করা থাকে)
+    if ADMIN_ID and user_id == 1146186608:
+        return True
+    # আইডি সেট করা না থাকলে ইউজারনেম দিয়ে চেক হবে
     if username and username.upper() == ADMIN_USERNAME.upper():
         return True
     return False
@@ -68,11 +77,11 @@ def remove_channel(channel_id):
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     if not is_admin(message):
-        bot.reply_to(message, "❌ আপনি এই বটের অ্যাডমিন নন। শুধুমাত্র @SUNNY_BRO1 এটি ব্যবহার করতে পারবেন।")
+        bot.reply_to(message, f"❌ আপনি এই বটের অ্যাডমিন নন। শুধুমাত্র @{ADMIN_USERNAME} এটি ব্যবহার করতে পারবেন।")
         return
         
     text = (
-        "🤖 **অ্যাডমিন প্যানেলে স্বাগতম @SUNNY_BRO1!**\n\n"
+        f"🤖 **অ্যাডমিন প্যানেলে স্বাগতম @{ADMIN_USERNAME}!**\n\n"
         "১. নতুন চ্যানেল অ্যাড করতে টাইপ করুন:\n👉 `/setchannel চ্যানেলের_আইডি`\n\n"
         "২. কোনো চ্যানেল ডিলিট করতে টাইপ করুন:\n👉 `/delchannel চ্যানেলের_আইডি`\n\n"
         "৩. পোস্ট করতে টাইপ করুন:\n👉 `/newpost`\n\n"
@@ -93,7 +102,7 @@ def handle_setchannel(message):
         
     channel_id = args[1].strip()
     if add_channel(channel_id):
-        bot.reply_to(message, f"✅ **চ্যানেল সফলভাবে অ্যাড করা হয়েছে!**\nযুক্ত করা চ্যানেল: `{channel_id}`", parse_mode='Markdown')
+        bot.reply_to(message, f"✅ **চ্যানেল সফলভাবে অ্যাড করা হয়েছে!**\nযুক্ত করা চ্যানেল: `{channel_id}`\n\n*(মনে রাখবেন: বটটিকে অবশ্যই এই চ্যানেলে অ্যাডমিন বানিয়ে পোস্ট করার পারমিশন দিতে হবে)*", parse_mode='Markdown')
     else:
         bot.reply_to(message, f"⚠️ এই চ্যানেলটি (`{channel_id}`) আগেই লিস্টে অ্যাড করা আছে।", parse_mode='Markdown')
 
@@ -187,7 +196,7 @@ def process_media(message):
     msg = bot.reply_to(message, text, parse_mode='Markdown')
     bot.register_next_step_handler(msg, process_buttons)
 
-# বাটন প্রসেস করা
+# বাটন প্রসেস করা ও চ্যানেলে পাঠানো
 def process_buttons(message):
     if not is_admin(message):
         return
@@ -242,15 +251,14 @@ def process_buttons(message):
             del user_data[message.chat.id]
         
     except telebot.apihelper.ApiTelegramException as e:
-        bot.reply_to(message, f"❌ **পোস্ট পাঠানো যায়নি!**\n\n*(Error: {e.description})*\n\nদয়া করে চেক করুন বটটি ওই চ্যানেলে অ্যাডমিন আছে কিনা এবং পোস্টের মেসেজ ফরম্যাটটি সঠিক আছে কিনা।", parse_mode='Markdown')
+        bot.reply_to(message, f"❌ **পোস্ট পাঠানো যায়নি!**\n\n*(Error: {e.description})*\n\nদয়া করে চেক করুন:\n১. বটটি `{channel_id}` চ্যানেলে অ্যাডমিন হিসেবে যুক্ত আছে কি না।\n২. বটের অ্যাডমিন পারমিশনে 'Post Messages' অন আছে কি না।\n৩. চ্যানেল আইডি ফরম্যাটটি সঠিক আছে কি না।", parse_mode='Markdown')
     except Exception as e:
         bot.reply_to(message, f"❌ একটি অজানা ত্রুটি হয়েছে: {e}")
 
 if __name__ == '__main__':
-    # ১. প্রথমে ব্যাকগ্রাউন্ডে Flask সার্ভার চালু করা হবে
+    # ব্যাকগ্রাউন্ডে Flask সার্ভার চালু
     server_thread = Thread(target=run_flask)
     server_thread.start()
     
-    # ২. এরপর টেলিগ্রাম বট রান করা হবে
     print("Admin Controller Bot is running...")
     bot.infinity_polling()
