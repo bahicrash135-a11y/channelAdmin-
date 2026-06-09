@@ -2,12 +2,26 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import json
 import os
+from flask import Flask
+from threading import Thread
 
-# আপনার বটের টোকেন এখানে দিন
-TOKEN = "8338804278:AAGAIJE02dT8zW7vX35ynlqPpcmoxjBe_bs"
+# Flask অ্যাপ তৈরি (Render-এর হেলথ চেক পাস করার জন্য)
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    # Render নিজে থেকেই একটি PORT অ্যাসাইন করে, তা না পেলে ডিফল্ট ৮০৮০ ব্যবহার হবে
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+# আপনার বটের টোকেন (নিরাপত্তার জন্য এটি Environment Variable-এ রাখা ভালো)
+TOKEN = os.getenv("BOT_TOKEN", "8338804278:AAGAIJE02dT8zW7vX35ynlqPpcmoxjBe_bs")
 bot = telebot.TeleBot(TOKEN)
 
-# অ্যাডমিন ইউজারনেম (এখানে আপনার ইউজারনেম দেওয়া আছে)
+# অ্যাডমিন ইউজারনেম
 ADMIN_USERNAME = "SUNNY_BRO1"
 
 # চ্যানেল সেভ রাখার জন্য ডাটাবেস ফাইল
@@ -100,7 +114,7 @@ def handle_delchannel(message):
     else:
         bot.reply_to(message, "⚠️ এই চ্যানেলটি আপনার লিস্টে পাওয়া যায়নি।")
 
-# নতুন পোস্ট করার কমান্ড (এখান থেকে চ্যানেল সিলেক্ট করতে হবে)
+# নতুন পোস্ট করার কমান্ড
 @bot.message_handler(commands=['newpost'])
 def handle_newpost(message):
     if not is_admin(message):
@@ -124,9 +138,7 @@ def handle_channel_selection(call):
         bot.answer_callback_query(call.id, "❌ আপনি এই বটের অ্যাডমিন নন।", show_alert=True)
         return
     
-    # লোডিং অ্যানিমেশন বন্ধ করার জন্য
     bot.answer_callback_query(call.id)
-        
     selected_channel = call.data.replace('select_', '')
     
     if call.message.chat.id not in user_data:
@@ -139,7 +151,7 @@ def handle_channel_selection(call):
     
     bot.register_next_step_handler(msg, process_media)
 
-# মিডিয়া (টেক্সট/ছবি/ভিডিও) প্রসেস করা
+# মিডিয়া প্রসেস করা
 def process_media(message):
     if not is_admin(message):
         return
@@ -175,7 +187,7 @@ def process_media(message):
     msg = bot.reply_to(message, text, parse_mode='Markdown')
     bot.register_next_step_handler(msg, process_buttons)
 
-# বাটন প্রসেস করে চ্যানেলে পোস্ট করা
+# বাটন প্রসেস করা
 def process_buttons(message):
     if not is_admin(message):
         return
@@ -191,7 +203,6 @@ def process_buttons(message):
                     btn_text = parts[0].strip()
                     btn_url = parts[1].strip()
                     
-                    # কালার অপশন (ইমোজির মাধ্যমে)
                     if len(parts) == 3:
                         color = parts[2].strip().lower()
                         if color in ['green', 'success']:
@@ -205,7 +216,6 @@ def process_buttons(message):
         except Exception as e:
             bot.reply_to(message, "⚠️ বাটনের ফরম্যাটে সমস্যা হয়েছে। বাটন ছাড়া পাঠানো হচ্ছে।")
 
-    # সেশন ডেটা নিরাপদ উপায়ে রিড করা
     chat_data = user_data.get(message.chat.id, {})
     channel_id = chat_data.get('selected_channel')
     post_type = chat_data.get('type')
@@ -228,7 +238,6 @@ def process_buttons(message):
             
         bot.reply_to(message, f"🎉 **সফল!** আপনার পোস্টটি সফলভাবে `{channel_id}` চ্যানেলে পাবলিশ করা হয়েছে।", parse_mode='Markdown')
         
-        # সফল পোস্টের পর সাময়িক ডেটা ডিলিট করে দেওয়া
         if message.chat.id in user_data:
             del user_data[message.chat.id]
         
@@ -238,5 +247,10 @@ def process_buttons(message):
         bot.reply_to(message, f"❌ একটি অজানা ত্রুটি হয়েছে: {e}")
 
 if __name__ == '__main__':
+    # ১. প্রথমে ব্যাকগ্রাউন্ডে Flask সার্ভার চালু করা হবে
+    server_thread = Thread(target=run_flask)
+    server_thread.start()
+    
+    # ২. এরপর টেলিগ্রাম বট রান করা হবে
     print("Admin Controller Bot is running...")
     bot.infinity_polling()
