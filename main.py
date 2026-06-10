@@ -1,7 +1,21 @@
+import os
+import json
+import threading
+import urllib.parse
+from flask import Flask
 import telebot
 from telebot import types
-import json
-import os
+
+# Render-এর পোর্ট বাইন্ডিংয়ের জন্য Flask অ্যাপ তৈরি
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running online!"
+
+@app.route('/health')
+def health():
+    return "OK", 200
 
 # আপনার দেওয়া টোকেন এবং এডমিন ইউজারনেম
 TOKEN = "8338804278:AAGAIJE02dT8zW7vX35ynlqPpcmoxjBe_bs"
@@ -28,6 +42,14 @@ def save_channels(channels):
 # সাময়িকভাবে পোস্টের তথ্য রাখার জন্য ডিকশনারি
 user_data = {}
 
+# ইউআরএল বা লিংক ভ্যালিডেশন চেক করার ফাংশন
+def is_valid_url(url):
+    try:
+        result = urllib.parse.urlparse(url)
+        return all([result.scheme, result.netloc])
+    except Exception:
+        return False
+
 # এডমিন কিনা তা যাচাই করার ফাংশন
 def is_admin(message):
     username = message.from_user.username
@@ -51,7 +73,7 @@ def send_welcome(message):
         "🔹 `/createpost` - বাটনসহ নতুন পোস্ট তৈরি ও পাবলিশ করুন।\n\n"
         "⚠️ **গুরুত্বপূর্ণ নোট:** পোস্ট সফলভাবে পাঠানোর জন্য বটটিকে অবশ্যই আপনার টার্গেট চ্যানেলে 'Administrator' হিসেবে যুক্ত করতে হবে এবং পোস্ট করার অনুমতি (Post Messages permission) দিতে হবে।"
     )
-    bot.reply_to(message, help_text, parse_mode="Markdown")
+    bot.reply_to(message, help_text, parse_mode="HTML")
 
 # নতুন চ্যানেল যুক্ত করার কমান্ড
 @bot.message_handler(commands=['addchannel'])
@@ -116,13 +138,13 @@ def list_channels(message):
             text += f"{i}. `{ch}`\n"
         bot.reply_to(message, text, parse_mode="Markdown")
 
-# নতুন পোস্ট তৈরি করার ধাপ ১: পোস্ট গ্রহণ
+# নতুন পোস্ট তৈরি করার ধাপ ১: পোস্ট কন্টেন্ট গ্রহণ
 @bot.message_handler(commands=['createpost'])
 def start_post(message):
     if not is_admin(message): 
         return
     
-    msg = bot.reply_to(message, "📝 আপনার পোস্টটি পাঠান।\n(আপনি সাধারণ টেক্সট, ফটো অথবা ভিডিও পাঠাতে পারেন):")
+    msg = bot.reply_to(message, "📝 আপনার পোস্টটি পাঠান।\n(আপনি সাধারণ টেক্সট, ফটো বা ভিডিও পাঠাতে পারেন):")
     bot.register_next_step_handler(msg, process_post_content)
 
 # পোস্ট তৈরি করার ধাপ ২: কন্টেন্ট প্রসেস এবং বাটন চাওয়া
@@ -139,10 +161,9 @@ def process_post_content(message):
         chat_id, 
         "🔗 এবার নিচে বাটন এবং লিংক যুক্ত করুন।\n\n"
         "**ফরমেট:**\n"
-        "`বাটন নাম | https://link1.com`\n"
-        "`বাটন নাম ২ | https://link2.com`\n\n"
-        "💡 *একাধিক বাটন নিচে নিচে দিতে পারেন। কোনো বাটন যুক্ত করতে না চাইলে 'skip' লিখে পাঠান।*",
-        parse_mode="Markdown"
+        "বাটন নাম | https://link1.com\n"
+        "বাটন নাম ২ | https://link2.com\n\n"
+        "💡 *একাধিক বাটন নিচে নিচে দিতে পারেন। কোনো বাটন যুক্ত করতে না চাইলে 'skip' লিখে পাঠান।*"
     )
     bot.register_next_step_handler(msg, process_post_buttons)
 
@@ -157,15 +178,21 @@ def process_post_buttons(message):
         for line in lines:
             if '|' in line:
                 parts = line.split('|')
-                btn_text = parts[0].strip()
-                btn_url = parts[1].strip()
-                buttons.append({'text': btn_text, 'url': btn_url})
+                if len(parts) >= 2:
+                    btn_text = parts[0].strip()
+                    btn_url = parts[1].strip()
+                    # লিংকে স্কিম (https://) না থাকলে স্বয়ংক্রিয়ভাবে যোগ করা
+                    if not (btn_url.startswith('http://') or btn_url.startswith('https://')):
+                        btn_url = 'https://' + btn_url
+                    
+                    if is_valid_url(btn_url):
+                        buttons.append({'text': btn_text, 'url': btn_url})
     
     user_data[chat_id]['buttons'] = buttons
     
     channels = load_channels()
     if not channels:
-        bot.send_message(chat_id, "❌ কোনো চ্যানেল যুক্ত করা নেই। অনুগ্রহ করে প্রথমে `/addchannel` ব্যবহার করে চ্যানেল যুক্ত করুন।", parse_mode="Markdown")
+        bot.send_message(chat_id, "❌ কোনো চ্যানেল যুক্ত করা নেই। অনুগ্রহ করে প্রথমে `/addchannel` ব্যবহার করে চ্যানেল যুক্ত করুন।")
         return
         
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -192,35 +219,44 @@ def handle_callback(call):
         channels = load_channels()
         targets_to_send = channels if target == "all" else [target]
         
-        # বাটন লেআউট তৈরি
         post_markup = types.InlineKeyboardMarkup()
         for btn in post_info.get('buttons', []):
             try:
                 post_markup.add(types.InlineKeyboardButton(text=btn['text'], url=btn['url']))
             except Exception:
-                continue  # ভুল লিংকের কারণে ক্রাশ হওয়া প্রতিরোধ করতে
+                continue
             
         success_count = 0
         fail_count = 0
+        error_logs = []
         
-        # পোস্ট পাঠানো শুরু
         for ch in targets_to_send:
             try:
+                # Markdown জটিলতা এড়াতে সাধারণ ফরম্যাটে পাঠানো হচ্ছে
                 if post_info['content_type'] == 'text':
-                    bot.send_message(ch, post_info['text'], reply_markup=post_markup, parse_mode="Markdown")
+                    bot.send_message(ch, post_info['text'], reply_markup=post_markup)
                 elif post_info['content_type'] == 'photo':
-                    bot.send_photo(ch, post_info['photo'], caption=post_info['text'], reply_markup=post_markup, parse_mode="Markdown")
+                    bot.send_photo(ch, post_info['photo'], caption=post_info['text'], reply_markup=post_markup)
                 elif post_info['content_type'] == 'video':
-                    bot.send_video(ch, post_info['video'], caption=post_info['text'], reply_markup=post_markup, parse_mode="Markdown")
+                    bot.send_video(ch, post_info['video'], caption=post_info['text'], reply_markup=post_markup)
                 success_count += 1
             except Exception as e:
-                print(f"Error sending to {ch}: {e}")
                 fail_count += 1
+                error_logs.append(f"❌ `{ch}`: {str(e)}")
         
+        result_message = (
+            f"✅ **পোস্টের প্রক্রিয়া সম্পন্ন হয়েছে!**\n\n"
+            f"🎉 সফলভাবে প্রেরিত: `{success_count}` টি চ্যানেল\n"
+            f"❌ ব্যর্থ হয়েছে: `{fail_count}` টি চ্যানেল\n"
+        )
+        
+        if error_logs:
+            result_message += "\n📋 **ব্যর্থ হওয়ার সুনির্দিষ্ট কারণসমূহ নিচে দেওয়া হলো:**\n" + "\n".join(error_logs)
+            
         bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
-            text=f"✅ **পোস্টের প্রক্রিয়া সম্পন্ন হয়েছে!**\n\n🎉 সফলভাবে প্রেরিত: `{success_count}` টি চ্যানেল\n❌ ব্যর্থ হয়েছে: `{fail_count}` টি চ্যানেল\n\n*(ব্যর্থ হওয়ার সম্ভাব্য কারণ: বটের কাছে চ্যানেলে পোস্ট করার এডমিন পারমিশন নেই)*",
+            text=result_message,
             parse_mode="Markdown"
         )
         user_data.pop(chat_id, None)
@@ -229,7 +265,16 @@ def handle_callback(call):
         bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="❌ পোস্ট পাঠানো বাতিল করা হয়েছে।")
         user_data.pop(chat_id, None)
 
-# বট চালু রাখা
-if __name__ == "__main__":
-    print("Bot is running...")
+# বট চালু করার ব্যাকগ্রাউন্ড থ্রেড
+def start_bot_polling():
     bot.infinity_polling()
+
+if __name__ == "__main__":
+    # বট পোলিং আলাদা একটি থ্রেডে ব্যাকগ্রাউন্ডে চালানো হবে
+    bot_thread = threading.Thread(target=start_bot_polling)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Render-এর জন্য Flask অ্যাপের ওয়েব পোর্ট রান করা হচ্ছে
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
