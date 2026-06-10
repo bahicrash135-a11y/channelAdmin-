@@ -10,7 +10,7 @@ from telebot import types
 BOT_TOKEN = "8733427120:AAGlZgeJVkuKG_PxpQmM7YJpqgCHTC7OhOc"
 
 # আপনার নিজের টেলিগ্রাম আইডি এখানে বসান (বটে /id কমান্ড দিয়ে আইডিটি পেয়ে যাবেন)
-ADMIN_ID = 123456789  
+ADMIN_ID = 8570946742
 
 # আপনার টেলিগ্রাম প্রাইভেট চ্যানেলের লিঙ্ক এখানে বসান
 CHANNEL_LINK = "https://t.me/your_private_channel"  
