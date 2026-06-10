@@ -18,7 +18,7 @@ CHANNEL_LINK = "https://t.me/+CSrv603jOew1NGE9"
 # আপনার রেজিস্ট্রেশন লিঙ্ক
 REGISTRATION_LINK = "https://tradexcope.com/r/Hc5qtsj1"
 
-# আপনার সিগন্যাল ওয়েব অ্যাপ এর লিঙ্ক এখানে বসান
+# আপনার সিগন্যাল ওয়েব অ্যাপ এর লিঙ্ক এখানে বসান (এটি বটের ভেতরেই ওপেন হবে)
 WEBAPP_LINK = "https://sunnybro.unaux.com/trd.html"  
 
 # ব্যানার ইমেজ লিঙ্ক (সব জায়গায় এটি ব্যবহার হবে)
@@ -321,8 +321,13 @@ def send_approved_webapp(user_id):
         "⚡ Smart Signals • Fast Analysis • Maximum Accuracy\n"
         "📈 Trade Smarter, Earn Better"
     )
+    
+    # WebApp সরাসরি বটের ভেতরে ওপেন করার জন্য types.WebAppInfo ব্যবহার করা হয়েছে
     markup = types.InlineKeyboardMarkup()
-    btn_webapp = types.InlineKeyboardButton("Open Signal Webapp 📈", url=WEBAPP_LINK)
+    btn_webapp = types.InlineKeyboardButton(
+        text="Open Signal Webapp 📈", 
+        web_app=types.WebAppInfo(url=WEBAPP_LINK)
+    )
     markup.add(btn_webapp)
     
     try:
