@@ -358,16 +358,22 @@ def process_broadcast(message):
 def index():
     return "Bot is successfully running!"
 
-def run_flask():
+# --- STARTUP LOGIC ---
+# ডেটাবেজ সেটআপ এবং ব্যাকগ্রাউন্ডে টেলিগ্রাম পোলিং চালু করা (Gunicorn দিয়ে রান করলেও এটি চলবে)
+init_db()
+
+def run_bot():
+    print("Bot polling started...")
+    try:
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"Bot Polling Error: {e}")
+
+bot_thread = threading.Thread(target=run_bot)
+bot_thread.daemon = True
+bot_thread.start()
+
+# লোকাল টেস্ট করার জন্য (Render এ Gunicorn সরাসরি ‘app’ অবজেক্ট ব্যবহার করবে)
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-# --- START BOT ---
-if __name__ == '__main__':
-    init_db()
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
-    
-    print("Bot polling started...")
-    bot.infinity_polling()
