@@ -150,16 +150,43 @@ def start_post(message):
     msg = bot.reply_to(message, "📝 আপনার পোস্টটি পাঠান।\n(আপনি সাধারণ টেক্সট, ফটো বা ভিডিও পাঠাতে পারেন):")
     bot.register_next_step_handler(msg, process_post_content)
 
-# পোস্ট তৈরি করার ধাপ ২: কন্টেন্ট প্রসেস এবং বাটন চাওয়া
+# পোস্ট তৈরি করার ধাপ ২: কন্টেন্ট প্রসেস এবং টাইটেল বা বিবরণ চাওয়া
 def process_post_content(message):
     chat_id = message.chat.id
+    content_type = message.content_type
+    
     user_data[chat_id] = {
         'text': message.text or message.caption or "",
         'photo': message.photo[-1].file_id if message.photo else None,
         'video': message.video.file_id if message.video else None,
-        'content_type': message.content_type
+        'content_type': content_type
     }
     
+    # যদি ফটো বা ভিডিও পাঠানো হয়, তবে টাইটেল বা বিবরণ সেট করার নতুন ধাপ
+    if content_type in ['photo', 'video']:
+        msg = bot.send_message(
+            chat_id, 
+            "📝 আপনার ফটো বা ভিডিওর জন্য একটি টাইটেল বা বিবরণ (Caption) পাঠান।\n"
+            "(কোনো টাইটেল বা ক্যাপশন দিতে না চাইলে অথবা আগের ক্যাপশনটিই রাখতে চাইলে 'skip' লিখে পাঠান):"
+        )
+        bot.register_next_step_handler(msg, process_post_title)
+    else:
+        # টেক্সট পোস্ট হলে সরাসরি বাটন সেট করার অপশনে চলে যাবে
+        ask_for_buttons(chat_id)
+
+# পোস্ট তৈরি করার ধাপ ২.৫: টাইটেল/ক্যাপশন ইনপুট নেওয়া (ফটো বা ভিডিওর জন্য)
+def process_post_title(message):
+    chat_id = message.chat.id
+    title_text = message.text.strip() if message.text else ""
+    
+    # ইউজার 'skip' না লিখলে তার পাঠানো টেক্সটটিকে টাইটেল বা ক্যাপশন হিসেবে সেট করা হবে
+    if title_text and title_text.lower() != 'skip':
+        user_data[chat_id]['text'] = message.text
+        
+    ask_for_buttons(chat_id)
+
+# বাটন ইনপুট নেওয়ার জন্য নির্দেশনা পাঠানো
+def ask_for_buttons(chat_id):
     msg = bot.send_message(
         chat_id, 
         "🔗 এবার নিচে বাটন, লিংক এবং কালার যুক্ত করুন।\n\n"
@@ -277,7 +304,7 @@ def handle_callback(call):
                     bot.send_photo(ch, post_info['photo'], caption=post_info['text'], reply_markup=post_markup)
                 elif post_info['content_type'] == 'video':
                     bot.send_video(ch, post_info['video'], caption=post_info['text'], reply_markup=post_markup)
-                success_count += 1
+                    success_count += 1
             except Exception as e:
                 fail_count += 1
                 error_logs.append(f"❌ `{ch}`: {str(e)}")
