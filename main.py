@@ -13,13 +13,13 @@ BOT_TOKEN = "8733427120:AAGlZgeJVkuKG_PxpQmM7YJpqgCHTC7OhOc"
 ADMIN_ID = 8570946742
 
 # আপনার টেলিগ্রাম প্রাইভেট চ্যানেলের লিঙ্ক এখানে বসান
-CHANNEL_LINK = "https://t.me/your_private_channel"  
+CHANNEL_LINK = "https://t.me/+CSrv603jOew1NGE9"  
 
 # আপনার রেজিস্ট্রেশন লিঙ্ক
 REGISTRATION_LINK = "https://tradexcope.com/r/Hc5qtsj1"
 
 # আপনার সিগন্যাল ওয়েব অ্যাপ এর লিঙ্ক এখানে বসান
-WEBAPP_LINK = "https://your-signal-webapp.com"  
+WEBAPP_LINK = "https://sunnybro.unaux.com/trd.html"  
 
 # ব্যানার ইমেজ লিঙ্ক (সব জায়গায় এটি ব্যবহার হবে)
 IMAGE_URL = "https://i.ibb.co.com/Wvc0m3Dk/e79d43bd-a19f-4758-be61-ce6d3b9ea22c.png"
