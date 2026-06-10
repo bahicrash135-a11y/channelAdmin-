@@ -21,7 +21,7 @@ REGISTRATION_LINK = "https://tradexcope.com/r/Hc5qtsj1"
 # আপনার সিগন্যাল ওয়েব অ্যাপ এর লিঙ্ক এখানে বসান
 WEBAPP_LINK = "https://your-signal-webapp.com"  
 
-# ব্যানার ইমেজ লিঙ্ক
+# ব্যানার ইমেজ লিঙ্ক (সব জায়গায় এটি ব্যবহার হবে)
 IMAGE_URL = "https://i.ibb.co.com/Wvc0m3Dk/e79d43bd-a19f-4758-be61-ce6d3b9ea22c.png"
 # ==============================================================================
 
@@ -56,6 +56,14 @@ def get_user(user_id):
     conn.close()
     return user
 
+def get_user_by_uid(uid):
+    conn = sqlite3.connect("bot_database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE uid = ?", (uid,))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
 def add_user(user_id, username):
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
@@ -70,6 +78,13 @@ def update_user(user_id, **kwargs):
         cursor.execute(f"UPDATE users SET {key} = ? WHERE user_id = ?", (value, user_id))
     conn.commit()
     conn.close()
+
+# --- HELPER TO DELETE PREVIOUS MESSAGES SAFELY ---
+def delete_safe(chat_id, message_id):
+    try:
+        bot.delete_message(chat_id, message_id)
+    except Exception:
+        pass
 
 # --- HELPER PARSER FOR BROADCAST BUTTONS ---
 def parse_broadcast_message(text):
@@ -109,6 +124,7 @@ def start_cmd(message):
     add_user(user_id, username)
     
     user = get_user(user_id)
+    # ইউজার অলরেডি ভেরিফাই বা অ্যাপ্রুভড হলে সরাসরি সিগন্যাল বাটন দেখানো হবে
     if user and user[4] == "approved":
         send_approved_webapp(user_id)
         return
@@ -121,9 +137,10 @@ def start_cmd(message):
     markup.add(btn_join)
     markup.add(btn_joined)
     
-    bot.send_message(
-        user_id, 
-        "👋 স্বাগতম! আমাদের বট ব্যবহার করতে প্রথমে আমাদের প্রাইভেট টেলিগ্রাম চ্যানেলে জয়েন করুন।\n\nWelcome! To use our bot, please join our private Telegram channel first.", 
+    bot.send_photo(
+        chat_id=user_id,
+        photo=IMAGE_URL,
+        caption="👋 স্বাগতম! আমাদের বট ব্যবহার করতে প্রথমে আমাদের প্রাইভেট টেলিগ্রাম চ্যানেলে জয়েন করুন।\n\nWelcome! To use our bot, please join our private Telegram channel first.",
         reply_markup=markup
     )
 
@@ -136,15 +153,17 @@ def check_joined_callback(call):
     user_id = call.from_user.id
     update_user(user_id, step="select_lang")
     
+    delete_safe(user_id, call.message.message_id)
+    
     markup = types.InlineKeyboardMarkup()
     btn_bn = types.InlineKeyboardButton("🇧🇩 বাংলা", callback_data="lang_bn")
     btn_en = types.InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")
     markup.add(btn_bn, btn_en)
     
-    bot.edit_message_text(
+    bot.send_photo(
         chat_id=user_id,
-        message_id=call.message.message_id,
-        text="👉 দয়া করে আপনার ভাষা নির্বাচন করুন।\n\n👉 Please select your language.",
+        photo=IMAGE_URL,
+        caption="👉 দয়া করে আপনার ভাষা নির্বাচন করুন।\n\n👉 Please select your language.",
         reply_markup=markup
     )
 
@@ -154,26 +173,30 @@ def lang_callback(call):
     lang = "bn" if call.data == "lang_bn" else "en"
     update_user(user_id, language=lang, step="wait_uid")
     
+    delete_safe(user_id, call.message.message_id)
+    
+    markup = types.InlineKeyboardMarkup()
+    btn_reg = types.InlineKeyboardButton("🔗 Register / রেজিস্ট্রেশন করুন", url=REGISTRATION_LINK)
+    markup.add(btn_reg)
+    
     if lang == "bn":
-        text = (
+        caption = (
             f"📥 **ধাপ ২: রেজিস্ট্রেশন এবং ইউআইডি**\n\n"
-            f"১. নিচের লিঙ্কে ক্লিক করে একটি নতুন অ্যাকাউন্ট তৈরি করুন:\n"
-            f"🔗 {REGISTRATION_LINK}\n\n"
-            f"২. অ্যাকাউন্ট তৈরি করার পর আপনার Trading UID (যেমন: 12345678) এখানে টেক্সট মেসেজ আকারে লিখে পাঠান।"
+            f"১. নিচে দেওয়া 'Register' বাটনে ক্লিক করে একটি নতুন অ্যাকাউন্ট তৈরি করুন।\n\n"
+            f"২. অ্যাকাউন্ট তৈরি করার পর আপনার Trading UID (যেমন: 12345678) এখানে লিখে পাঠান।"
         )
     else:
-        text = (
+        caption = (
             f"📥 **Step 2: Registration & UID**\n\n"
-            f"1. Click the link below to create a new account:\n"
-            f"🔗 {REGISTRATION_LINK}\n\n"
-            f"2. After creating the account, send your Trading UID (e.g., 12345678) here as a text message."
+            f"1. Click the 'Register' button below to create a new account.\n\n"
+            f"2. After creating the account, send your Trading UID (e.g., 12345678) here."
         )
         
-    bot.edit_message_text(
+    bot.send_photo(
         chat_id=user_id,
-        message_id=call.message.message_id,
-        text=text,
-        disable_web_page_preview=True,
+        photo=IMAGE_URL,
+        caption=caption,
+        reply_markup=markup,
         parse_mode="Markdown"
     )
 
@@ -181,20 +204,46 @@ def lang_callback(call):
 def handle_text(message):
     user_id = message.from_user.id
     username = message.from_user.username or "No Username"
+    text = message.text.strip()
     
-    if user_id == ADMIN_ID and ADMIN_STATES.get(user_id) == "waiting_broadcast":
-        process_broadcast(message)
-        return
+    # ১. এডমিন সেটিংস এবং শর্টকাট ভেরিফিকেশন চেক
+    if user_id == ADMIN_ID:
+        if ADMIN_STATES.get(user_id) == "waiting_broadcast":
+            process_broadcast(message)
+            return
+            
+        # এডমিন যদি ইউজারের ৮ ডিজিটের (বা যেকোনো সংখ্যার) UID সরাসরি পেস্ট করে সেন্ড করেন
+        if text.isdigit():
+            target_user = get_user_by_uid(text)
+            if target_user:
+                target_user_id = target_user[0]
+                update_user(target_user_id, status="approved", step="approved")
+                
+                # ভেরিফাইড ইউজারকে ওপেন সিগন্যাল মেসেজ পাঠানো হবে
+                send_approved_webapp(target_user_id)
+                
+                bot.reply_to(message, f"✅ সফলভাবে UID `{text}` ভেরিফাই করা হয়েছে! ইউজারের বটের ভেতর সিগন্যাল ওয়েবঅ্যাপ বাটন চলে গেছে।", parse_mode="Markdown")
+            else:
+                bot.reply_to(message, f"❌ ডেটাবেজে `{text}` UID যুক্ত কোনো ইউজার খুঁজে পাওয়া যায়নি।", parse_mode="Markdown")
+            return
 
+    # ২. সাধারণ ইউজারদের প্রসেস চেক
     user = get_user(user_id)
     if not user:
         return
         
+    status = user[4]
     step = user[5]
     lang = user[2] or "en"
     
+    # ইউজার অলরেডি ভেরিফাইড হলে এবং আবার কোনো আইডি পেস্ট বা মেসেজ পাঠালে
+    if status == "approved":
+        send_approved_webapp(user_id)
+        return
+    
+    # ইউজার যখন আইডি পাঠাবে
     if step == "wait_uid":
-        uid_candidate = message.text.strip()
+        uid_candidate = text
         
         if not uid_candidate.isdigit():
             if lang == "bn":
@@ -220,15 +269,19 @@ def handle_text(message):
                 f"Write in message: 'Please activate my UID: {uid_candidate}'"
             )
             
-        bot.send_message(user_id, user_msg)
+        bot.send_photo(
+            chat_id=user_id,
+            photo=IMAGE_URL,
+            caption=user_msg
+        )
         
+        # এডমিন নোটিফিকেশন
         admin_notify_msg = (
             f"🔔 **নতুন UID সাবমিশন!**\n\n"
             f"👤 ইউজার: @{username}\n"
             f"🆔 টেলিগ্রাম আইডি: `{user_id}`\n"
             f"📈 Trading UID: `{uid_candidate}`\n\n"
-            f"এই ইউজারকে অ্যাপ্রুভ করতে নিচের কমান্ডটি কপি করে পেস্ট করুন:\n"
-            f"`/approve {user_id}`"
+            f"এই ইউজারকে ভেরিফাই করতে জাস্ট বটের ভেতর এই ৮ ডিজিটের কোডটি `{uid_candidate}` লিখে সেন্ড করুন।"
         )
         try:
             bot.send_message(ADMIN_ID, admin_notify_msg, parse_mode="Markdown")
@@ -359,7 +412,6 @@ def index():
     return "Bot is successfully running!"
 
 # --- STARTUP LOGIC ---
-# ডেটাবেজ সেটআপ এবং ব্যাকগ্রাউন্ডে টেলিগ্রাম পোলিং চালু করা (Gunicorn দিয়ে রান করলেও এটি চলবে)
 init_db()
 
 def run_bot():
@@ -373,7 +425,6 @@ bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
 
-# লোকাল টেস্ট করার জন্য (Render এ Gunicorn সরাসরি ‘app’ অবজেক্ট ব্যবহার করবে)
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
