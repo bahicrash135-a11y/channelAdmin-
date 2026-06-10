@@ -1,264 +1,235 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from telebot import types
 import json
 import os
-from flask import Flask
-from threading import Thread
 
-# Flask অ্যাপ তৈরি (Render-এর হেলথ চেক পাস করার জন্য)
-app = Flask('')
+# আপনার দেওয়া টোকেন এবং এডমিন ইউজারনেম
+TOKEN = "8338804278:AAGAIJE02dT8zW7vX35ynlqPpcmoxjBe_bs"
+ADMIN_USERNAME = "TRADER_RAJ10"
 
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-# আপনার বটের টোকেন (Environment Variable থেকে নেওয়া ভালো)
-TOKEN = os.getenv("BOT_TOKEN", "8338804278:AAGAIJE02dT8zW7vX35ynlqPpcmoxjBe_bs")
 bot = telebot.TeleBot(TOKEN)
+CHANNELS_FILE = "channels.json"
 
-# আপনার টেলিগ্রাম অ্যাকাউন্টের Numeric User ID দিন (এটি দিলে ইউজারনেম পরিবর্তন করলেও সমস্যা হবে না)
-# আপনার আইডি পেতে টেলিগ্রামে @userinfobot এ গিয়ে স্টার্ট দিন।
-ADMIN_ID = None  # উদাহরণ: 123456789 (এখানে আপনার সংখ্যাযুক্ত আইডি দিন)
-
-# ব্যাকআপ হিসেবে অ্যাডমিন ইউজারনেমও রাখা হলো
-ADMIN_USERNAME = "SUNNY_BRO1"
-
-# চ্যানেল সেভ রাখার জন্য ডাটাবেস ফাইল
-DATA_FILE = "bot_data.json"
-user_data = {}
-
-# অ্যাডমিন কি না তা চেক করার উন্নত ফাংশন
-def is_admin(message_or_call):
-    user_id = message_or_call.from_user.id
-    username = message_or_call.from_user.username
-    
-    # প্রথমে আইডি দিয়ে চেক করা হবে (যদি আইডি সেট করা থাকে)
-    if ADMIN_ID and user_id == 1146186608:
-        return True
-    # আইডি সেট করা না থাকলে ইউজারনেম দিয়ে চেক হবে
-    if username and username.upper() == ADMIN_USERNAME.upper():
-        return True
-    return False
-
-# একাধিক চ্যানেল সেভ করার ফাংশনগুলো
+# চ্যানেল ডাটাবেজ লোড করার ফাংশন
 def load_channels():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            try:
-                data = json.load(f)
-                return data.get("channels", [])
-            except:
-                return []
+    if os.path.exists(CHANNELS_FILE):
+        try:
+            with open(CHANNELS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return []
     return []
 
-def add_channel(channel_id):
-    channels = load_channels()
-    if channel_id not in channels:
-        channels.append(channel_id)
-        with open(DATA_FILE, 'w') as f:
-            json.dump({"channels": channels}, f, indent=4)
+# চ্যানেল ডাটাবেজ সেভ করার ফাংশন
+def save_channels(channels):
+    with open(CHANNELS_FILE, "w") as f:
+        json.dump(channels, f)
+
+# সাময়িকভাবে পোস্টের তথ্য রাখার জন্য ডিকশনারি
+user_data = {}
+
+# এডমিন কিনা তা যাচাই করার ফাংশন
+def is_admin(message):
+    username = message.from_user.username
+    if username and username.lower() == ADMIN_USERNAME.lower():
         return True
+    bot.reply_to(message, "❌ দুঃখিত, আপনি এই বটের এডমিন নন।")
     return False
 
-def remove_channel(channel_id):
-    channels = load_channels()
-    if channel_id in channels:
-        channels.remove(channel_id)
-        with open(DATA_FILE, 'w') as f:
-            json.dump({"channels": channels}, f, indent=4)
-        return True
-    return False
-
-# স্টার্ট কমান্ড
+# /start বা /help কমান্ড
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    if not is_admin(message):
-        bot.reply_to(message, f"❌ আপনি এই বটের অ্যাডমিন নন। শুধুমাত্র @{ADMIN_USERNAME} এটি ব্যবহার করতে পারবেন।")
+    if not is_admin(message): 
         return
-        
-    text = (
-        f"🤖 **অ্যাডমিন প্যানেলে স্বাগতম @{ADMIN_USERNAME}!**\n\n"
-        "১. নতুন চ্যানেল অ্যাড করতে টাইপ করুন:\n👉 `/setchannel চ্যানেলের_আইডি`\n\n"
-        "২. কোনো চ্যানেল ডিলিট করতে টাইপ করুন:\n👉 `/delchannel চ্যানেলের_আইডি`\n\n"
-        "৩. পোস্ট করতে টাইপ করুন:\n👉 `/newpost`\n\n"
-        "*(আপনি যতখুশি চ্যানেল অ্যাড করতে পারবেন)*"
+    
+    help_text = (
+        "👋 **স্বাগতম!** এটি আপনার পোস্ট কন্ট্রোলার বট।\n\n"
+        "📌 **এডমিন কমান্ডসমূহ:**\n"
+        "🔹 `/addchannel <চ্যানেল ইউজারনেম বা আইডি>` - নতুন চ্যানেল যুক্ত করুন।\n"
+        "🔹 `/removechannel <চ্যানেল ইউজারনেম বা আইডি>` - চ্যানেল তালিকা থেকে সরিয়ে দিন।\n"
+        "🔹 `/listchannels` - যুক্ত থাকা সকল চ্যানেলের তালিকা দেখুন।\n"
+        "🔹 `/createpost` - বাটনসহ নতুন পোস্ট তৈরি ও পাবলিশ করুন।\n\n"
+        "⚠️ **গুরুত্বপূর্ণ নোট:** পোস্ট সফলভাবে পাঠানোর জন্য বটটিকে অবশ্যই আপনার টার্গেট চ্যানেলে 'Administrator' হিসেবে যুক্ত করতে হবে এবং পোস্ট করার অনুমতি (Post Messages permission) দিতে হবে।"
     )
-    bot.reply_to(message, text, parse_mode='Markdown')
+    bot.reply_to(message, help_text, parse_mode="Markdown")
 
-# চ্যানেল সেট করার কমান্ড
-@bot.message_handler(commands=['setchannel'])
-def handle_setchannel(message):
-    if not is_admin(message):
+# নতুন চ্যানেল যুক্ত করার কমান্ড
+@bot.message_handler(commands=['addchannel'])
+def add_channel(message):
+    if not is_admin(message): 
         return
+    
+    try:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "⚠️ ব্যবহার নিয়ম:\n`/addchannel @channel_username` (পাবলিক চ্যানেলের জন্য)\nঅথবা\n`/addchannel -100123456789` (প্রাইভেট চ্যানেলের আইডির জন্য)", parse_mode="Markdown")
+            return
         
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        bot.reply_to(message, "⚠️ **সঠিক নিয়ম:**\n`/setchannel @yourchannel` অথবা প্রাইভেট হলে `/setchannel -10012345678`", parse_mode='Markdown')
-        return
+        new_channel = parts[1].strip()
+        channels = load_channels()
         
-    channel_id = args[1].strip()
-    if add_channel(channel_id):
-        bot.reply_to(message, f"✅ **চ্যানেল সফলভাবে অ্যাড করা হয়েছে!**\nযুক্ত করা চ্যানেল: `{channel_id}`\n\n*(মনে রাখবেন: বটটিকে অবশ্যই এই চ্যানেলে অ্যাডমিন বানিয়ে পোস্ট করার পারমিশন দিতে হবে)*", parse_mode='Markdown')
-    else:
-        bot.reply_to(message, f"⚠️ এই চ্যানেলটি (`{channel_id}`) আগেই লিস্টে অ্যাড করা আছে।", parse_mode='Markdown')
+        if new_channel not in channels:
+            channels.append(new_channel)
+            save_channels(channels)
+            bot.reply_to(message, f"✅ চ্যানেল `{new_channel}` সফলভাবে যুক্ত করা হয়েছে।\n(নিশ্চিত করুন বটটি এই চ্যানেলের এডমিন হিসেবে যুক্ত আছে।)", parse_mode="Markdown")
+        else:
+            bot.reply_to(message, "⚠️ এই চ্যানেলটি ইতিমধ্যেই আপনার তালিকায় যুক্ত আছে।")
+    except Exception as e:
+        bot.reply_to(message, f"❌ ত্রুটি ঘটেছে: {str(e)}")
 
-# চ্যানেল ডিলিট করার কমান্ড
-@bot.message_handler(commands=['delchannel'])
-def handle_delchannel(message):
-    if not is_admin(message):
+# চ্যানেল মুছে ফেলার কমান্ড
+@bot.message_handler(commands=['removechannel'])
+def remove_channel(message):
+    if not is_admin(message): 
         return
+    
+    try:
+        parts = message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            bot.reply_to(message, "⚠️ ব্যবহার নিয়ম: `/removechannel @channel_username` অথবা `/removechannel -100123456789`", parse_mode="Markdown")
+            return
         
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        bot.reply_to(message, "⚠️ **সঠিক নিয়ম:**\n`/delchannel @yourchannel`", parse_mode='Markdown')
-        return
+        target_channel = parts[1].strip()
+        channels = load_channels()
         
-    channel_id = args[1].strip()
-    if remove_channel(channel_id):
-        bot.reply_to(message, f"🗑️ **চ্যানেল সফলভাবে রিমুভ করা হয়েছে!**\nরিমুভ করা চ্যানেল: `{channel_id}`", parse_mode='Markdown')
-    else:
-        bot.reply_to(message, "⚠️ এই চ্যানেলটি আপনার লিস্টে পাওয়া যায়নি।")
+        if target_channel in channels:
+            channels.remove(target_channel)
+            save_channels(channels)
+            bot.reply_to(message, f"✅ চ্যানেল `{target_channel}` তালিকা থেকে সরিয়ে দেওয়া হয়েছে।", parse_mode="Markdown")
+        else:
+            bot.reply_to(message, "⚠️ এই চ্যানেলটি তালিকায় পাওয়া যায়নি।")
+    except Exception as e:
+        bot.reply_to(message, f"❌ ত্রুটি ঘটেছে: {str(e)}")
 
-# নতুন পোস্ট করার কমান্ড
-@bot.message_handler(commands=['newpost'])
-def handle_newpost(message):
-    if not is_admin(message):
+# চ্যানেলের তালিকা দেখার কমান্ড
+@bot.message_handler(commands=['listchannels'])
+def list_channels(message):
+    if not is_admin(message): 
         return
-        
+    
     channels = load_channels()
     if not channels:
-        bot.reply_to(message, "⚠️ আপনার লিস্টে কোনো চ্যানেল নেই। দয়া করে আগে `/setchannel` কমান্ড দিয়ে চ্যানেল অ্যাড করুন।")
-        return
-        
-    markup = InlineKeyboardMarkup(row_width=1)
-    for ch in channels:
-        markup.add(InlineKeyboardButton(text=f"📢 {ch}", callback_data=f"select_{ch}"))
-        
-    bot.reply_to(message, "👇 **কোন চ্যানেলে পোস্ট করতে চান তা নিচের বাটন থেকে নির্বাচন করুন:**", reply_markup=markup)
-
-# চ্যানেলের বাটনে ক্লিক করলে যা হবে
-@bot.callback_query_handler(func=lambda call: call.data.startswith('select_'))
-def handle_channel_selection(call):
-    if not is_admin(call):
-        bot.answer_callback_query(call.id, "❌ আপনি এই বটের অ্যাডমিন নন।", show_alert=True)
-        return
-    
-    bot.answer_callback_query(call.id)
-    selected_channel = call.data.replace('select_', '')
-    
-    if call.message.chat.id not in user_data:
-        user_data[call.message.chat.id] = {}
-    user_data[call.message.chat.id]['selected_channel'] = selected_channel
-    
-    bot.edit_message_text(f"✅ আপনি **{selected_channel}** নির্বাচন করেছেন।", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='Markdown')
-    
-    msg = bot.send_message(call.message.chat.id, "📝 **এবার আপনার পোস্টের ম্যাটেরিয়াল দিন:**\n\nআপনি চাইলে কোনো **টেক্সট (Text)**, **ছবি (Photo)** অথবা **ভিডিও (Video)** পাঠাতে পারেন। (ছবি বা ভিডিওর সাথে চাইলে ক্যাপশনও লিখে দিতে পারেন।)")
-    
-    bot.register_next_step_handler(msg, process_media)
-
-# মিডিয়া প্রসেস করা
-def process_media(message):
-    if not is_admin(message):
-        return
-        
-    if message.chat.id not in user_data:
-        user_data[message.chat.id] = {}
-        
-    if message.content_type == 'text':
-        user_data[message.chat.id]['type'] = 'text'
-        user_data[message.chat.id]['content'] = message.html_text
-        
-    elif message.content_type == 'photo':
-        user_data[message.chat.id]['type'] = 'photo'
-        user_data[message.chat.id]['file_id'] = message.photo[-1].file_id 
-        user_data[message.chat.id]['content'] = message.html_caption if message.html_caption else ""
-        
-    elif message.content_type == 'video':
-        user_data[message.chat.id]['type'] = 'video'
-        user_data[message.chat.id]['file_id'] = message.video.file_id
-        user_data[message.chat.id]['content'] = message.html_caption if message.html_caption else ""
+        bot.reply_to(message, "📂 কোনো চ্যানেল যুক্ত করা নেই।")
     else:
-        msg = bot.reply_to(message, "⚠️ এই ফরম্যাটটি সাপোর্ট করে না। দয়া করে টেক্সট, ছবি বা ভিডিও দিন।")
-        bot.register_next_step_handler(msg, process_media)
-        return
+        text = "📋 **আপনার যুক্তকৃত চ্যানেলের তালিকা:**\n\n"
+        for i, ch in enumerate(channels, 1):
+            text += f"{i}. `{ch}`\n"
+        bot.reply_to(message, text, parse_mode="Markdown")
 
-    text = (
-        "✅ **ফাইল রিসিভ হয়েছে!**\n\n"
-        "এবার বাটনগুলো দিন (নিচের নিয়মে):\n"
-        "`বাটনের নাম | লিংক | কালার` (green/red/blue)\n\n"
-        "**উদাহরণ:** `REGISTER NOW | https://elix.com | green`\n\n"
-        "*যদি কোনো বাটন না চান, তবে শুধু `skip` লিখুন।*"
+# নতুন পোস্ট তৈরি করার ধাপ ১: পোস্ট গ্রহণ
+@bot.message_handler(commands=['createpost'])
+def start_post(message):
+    if not is_admin(message): 
+        return
+    
+    msg = bot.reply_to(message, "📝 আপনার পোস্টটি পাঠান।\n(আপনি সাধারণ টেক্সট, ফটো অথবা ভিডিও পাঠাতে পারেন):")
+    bot.register_next_step_handler(msg, process_post_content)
+
+# পোস্ট তৈরি করার ধাপ ২: কন্টেন্ট প্রসেস এবং বাটন চাওয়া
+def process_post_content(message):
+    chat_id = message.chat.id
+    user_data[chat_id] = {
+        'text': message.text or message.caption or "",
+        'photo': message.photo[-1].file_id if message.photo else None,
+        'video': message.video.file_id if message.video else None,
+        'content_type': message.content_type
+    }
+    
+    msg = bot.send_message(
+        chat_id, 
+        "🔗 এবার নিচে বাটন এবং লিংক যুক্ত করুন।\n\n"
+        "**ফরমেট:**\n"
+        "`বাটন নাম | https://link1.com`\n"
+        "`বাটন নাম ২ | https://link2.com`\n\n"
+        "💡 *একাধিক বাটন নিচে নিচে দিতে পারেন। কোনো বাটন যুক্ত করতে না চাইলে 'skip' লিখে পাঠান।*",
+        parse_mode="Markdown"
     )
-    msg = bot.reply_to(message, text, parse_mode='Markdown')
-    bot.register_next_step_handler(msg, process_buttons)
+    bot.register_next_step_handler(msg, process_post_buttons)
 
-# বাটন প্রসেস করা ও চ্যানেলে পাঠানো
-def process_buttons(message):
-    if not is_admin(message):
-        return
-        
-    markup = InlineKeyboardMarkup(row_width=1)
+# পোস্ট তৈরি করার ধাপ ৩: বাটন প্রসেস ও চ্যানেল সিলেক্ট
+def process_post_buttons(message):
+    chat_id = message.chat.id
+    text = message.text.strip() if message.text else ""
     
-    if message.text and message.text.lower() != 'skip':
-        try:
-            lines = message.text.split('\n')
-            for line in lines:
+    buttons = []
+    if text.lower() != 'skip':
+        lines = text.split('\n')
+        for line in lines:
+            if '|' in line:
                 parts = line.split('|')
-                if len(parts) >= 2:
-                    btn_text = parts[0].strip()
-                    btn_url = parts[1].strip()
-                    
-                    if len(parts) == 3:
-                        color = parts[2].strip().lower()
-                        if color in ['green', 'success']:
-                            btn_text = f"🟢 {btn_text}"
-                        elif color in ['red', 'danger']:
-                            btn_text = f"🔴 {btn_text}"
-                        elif color in ['blue', 'primary']:
-                            btn_text = f"🔵 {btn_text}"
-                    
-                    markup.add(InlineKeyboardButton(text=btn_text, url=btn_url))
-        except Exception as e:
-            bot.reply_to(message, "⚠️ বাটনের ফরম্যাটে সমস্যা হয়েছে। বাটন ছাড়া পাঠানো হচ্ছে।")
-
-    chat_data = user_data.get(message.chat.id, {})
-    channel_id = chat_data.get('selected_channel')
-    post_type = chat_data.get('type')
-    post_content = chat_data.get('content')
-    file_id = chat_data.get('file_id')
+                btn_text = parts[0].strip()
+                btn_url = parts[1].strip()
+                buttons.append({'text': btn_text, 'url': btn_url})
     
-    if not channel_id or not post_type:
-        bot.reply_to(message, "❌ সেশন শেষ হয়ে গেছে বা কোনো ভুল হয়েছে। অনুগ্রহ করে আবার `/newpost` দিন।", parse_mode='Markdown')
+    user_data[chat_id]['buttons'] = buttons
+    
+    channels = load_channels()
+    if not channels:
+        bot.send_message(chat_id, "❌ কোনো চ্যানেল যুক্ত করা নেই। অনুগ্রহ করে প্রথমে `/addchannel` ব্যবহার করে চ্যানেল যুক্ত করুন।", parse_mode="Markdown")
         return
         
-    try:
-        if post_type == 'text':
-            bot.send_message(chat_id=channel_id, text=post_content, reply_markup=markup, parse_mode='HTML')
-            
-        elif post_type == 'photo':
-            bot.send_photo(chat_id=channel_id, photo=file_id, caption=post_content, reply_markup=markup, parse_mode='HTML')
-            
-        elif post_type == 'video':
-            bot.send_video(chat_id=channel_id, video=file_id, caption=post_content, reply_markup=markup, parse_mode='HTML')
-            
-        bot.reply_to(message, f"🎉 **সফল!** আপনার পোস্টটি সফলভাবে `{channel_id}` চ্যানেলে পাবলিশ করা হয়েছে।", parse_mode='Markdown')
-        
-        if message.chat.id in user_data:
-            del user_data[message.chat.id]
-        
-    except telebot.apihelper.ApiTelegramException as e:
-        bot.reply_to(message, f"❌ **পোস্ট পাঠানো যায়নি!**\n\n*(Error: {e.description})*\n\nদয়া করে চেক করুন:\n১. বটটি `{channel_id}` চ্যানেলে অ্যাডমিন হিসেবে যুক্ত আছে কি না।\n২. বটের অ্যাডমিন পারমিশনে 'Post Messages' অন আছে কি না।\n৩. চ্যানেল আইডি ফরম্যাটটি সঠিক আছে কি না।", parse_mode='Markdown')
-    except Exception as e:
-        bot.reply_to(message, f"❌ একটি অজানা ত্রুটি হয়েছে: {e}")
-
-if __name__ == '__main__':
-    # ব্যাকগ্রাউন্ডে Flask সার্ভার চালু
-    server_thread = Thread(target=run_flask)
-    server_thread.start()
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for ch in channels:
+        markup.add(types.InlineKeyboardButton(text=f"📢 {ch}", callback_data=f"send_to:{ch}"))
+    markup.add(types.InlineKeyboardButton(text="📢 সকল চ্যানেলে পাঠান (Send to All)", callback_data="send_to:all"))
+    markup.add(types.InlineKeyboardButton(text="❌ বাতিল করুন (Cancel)", callback_data="cancel_post"))
     
-    print("Admin Controller Bot is running...")
+    bot.send_message(chat_id, "🎯 আপনি পোস্টটি কোন চ্যানেলে পাঠাতে চান? নিচের অপশন থেকে নির্বাচন করুন:", reply_markup=markup)
+
+# বাটন ক্লিক হ্যান্ডলার (পোস্ট পাঠানো বা বাতিল করা)
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    chat_id = call.message.chat.id
+    
+    if call.data.startswith("send_to:"):
+        target = call.data.replace("send_to:", "")
+        post_info = user_data.get(chat_id)
+        
+        if not post_info:
+            bot.answer_callback_query(call.id, "❌ পোস্টের তথ্য পাওয়া যায়নি। নতুন করে চেষ্টা করুন।")
+            return
+            
+        channels = load_channels()
+        targets_to_send = channels if target == "all" else [target]
+        
+        # বাটন লেআউট তৈরি
+        post_markup = types.InlineKeyboardMarkup()
+        for btn in post_info.get('buttons', []):
+            try:
+                post_markup.add(types.InlineKeyboardButton(text=btn['text'], url=btn['url']))
+            except Exception:
+                continue  # ভুল লিংকের কারণে ক্রাশ হওয়া প্রতিরোধ করতে
+            
+        success_count = 0
+        fail_count = 0
+        
+        # পোস্ট পাঠানো শুরু
+        for ch in targets_to_send:
+            try:
+                if post_info['content_type'] == 'text':
+                    bot.send_message(ch, post_info['text'], reply_markup=post_markup, parse_mode="Markdown")
+                elif post_info['content_type'] == 'photo':
+                    bot.send_photo(ch, post_info['photo'], caption=post_info['text'], reply_markup=post_markup, parse_mode="Markdown")
+                elif post_info['content_type'] == 'video':
+                    bot.send_video(ch, post_info['video'], caption=post_info['text'], reply_markup=post_markup, parse_mode="Markdown")
+                success_count += 1
+            except Exception as e:
+                print(f"Error sending to {ch}: {e}")
+                fail_count += 1
+        
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=call.message.message_id,
+            text=f"✅ **পোস্টের প্রক্রিয়া সম্পন্ন হয়েছে!**\n\n🎉 সফলভাবে প্রেরিত: `{success_count}` টি চ্যানেল\n❌ ব্যর্থ হয়েছে: `{fail_count}` টি চ্যানেল\n\n*(ব্যর্থ হওয়ার সম্ভাব্য কারণ: বটের কাছে চ্যানেলে পোস্ট করার এডমিন পারমিশন নেই)*",
+            parse_mode="Markdown"
+        )
+        user_data.pop(chat_id, None)
+        
+    elif call.data == "cancel_post":
+        bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="❌ পোস্ট পাঠানো বাতিল করা হয়েছে।")
+        user_data.pop(chat_id, None)
+
+# বট চালু রাখা
+if __name__ == "__main__":
+    print("Bot is running...")
     bot.infinity_polling()
