@@ -34,7 +34,7 @@ def load_channels():
             return []
     return []
 
-# চ্যানেল ডাটাবেজ সেভ করার ফাংশন
+# channel ডাটাবেজ সেভ করার ফাংশন
 def save_channels(channels):
     with open(CHANNELS_FILE, "w") as f:
         json.dump(channels, f)
@@ -55,7 +55,10 @@ def is_admin(message):
     username = message.from_user.username
     if username and username.lower() == ADMIN_USERNAME.lower():
         return True
-    bot.reply_to(message, "❌ দুঃখিত, আপনি এই বটের এডমিন নন।")
+    
+    # ইউজার এডমিন না হলে তাকে তার ইউজারনেমসহ এরর মেসেজ দেখাবে (ডিবাগিংয়ের সুবিধার জন্য)
+    display_username = f"@{username}" if username else "ইউজারনেম সেট করা নেই"
+    bot.reply_to(message, f"❌ দুঃখিত, আপনি এই বটের এডমিন নন।\n👤 আপনার ইউজারনেম: {display_username}\n⚙️ অনুমতিপ্রাপ্ত এডমিন ইউজারনেম: @{ADMIN_USERNAME}")
     return False
 
 # /start বা /help কমান্ড
@@ -300,16 +303,28 @@ def handle_callback(call):
         bot.edit_message_text(chat_id=chat_id, message_id=call.message.message_id, text="❌ পোস্ট পাঠানো বাতিল করা হয়েছে।")
         user_data.pop(chat_id, None)
 
-# বট চালু করার ব্যাকগ্রাউন্ড থ্রেড
-def start_bot_polling():
-    bot.infinity_polling()
 
+# ==========================================
+# GUNICORN এবং RENDER এর জন্য গ্লোবাল স্টার্টআপ সেটিংস
+# ==========================================
+
+# টেলিগ্রাম পোলিং চালু করার মূল ফাংশন
+def start_bot_polling():
+    try:
+        print("Webhook রিমুভ করা হচ্ছে...")
+        bot.remove_webhook()
+        print("টেলিগ্রাম বট পোলিং সফলভাবে চালু করা হচ্ছে...")
+        # skip_pending=True দেওয়ার ফলে অফলাইনে থাকা অবস্থায় জমা হওয়া পুরানো মেসেজগুলো স্কিপ হবে
+        bot.infinity_polling(skip_pending=True)
+    except Exception as e:
+        print(f"বট পোলিং চালুর সময় ত্রুটি ঘটেছে: {e}")
+
+# Gunicorn যাতে ইমপোর্ট করার সাথে সাথে ব্যাকগ্রাউন্ডে বট চালু করতে পারে
+bot_thread = threading.Thread(target=start_bot_polling)
+bot_thread.daemon = True
+bot_thread.start()
+
+# Render-এর লোকাল ডেভেলপমেন্ট এবং পোর্ট বাইন্ডিং
 if __name__ == "__main__":
-    # বট পোলিং আলাদা একটি থ্রেডে ব্যাকগ্রাউন্ডে চালানো হবে
-    bot_thread = threading.Thread(target=start_bot_polling)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # Render-এর জন্য Flask অ্যাপের ওয়েব পোর্ট রান করা হচ্ছে
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
