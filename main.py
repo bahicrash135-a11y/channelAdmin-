@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running online!"
+    return "Bot is running online with Colored Buttons!"
 
 @app.route('/health')
 def health():
@@ -159,11 +159,19 @@ def process_post_content(message):
     
     msg = bot.send_message(
         chat_id, 
-        "🔗 এবার নিচে বাটন এবং লিংক যুক্ত করুন।\n\n"
+        "🔗 এবার নিচে বাটন, লিংক এবং কালার যুক্ত করুন।\n\n"
         "**ফরমেট:**\n"
-        "বাটন নাম | https://link1.com\n"
-        "বাটন নাম ২ | https://link2.com\n\n"
-        "💡 *একাধিক বাটন নিচে নিচে দিতে পারেন। কোনো বাটন যুক্ত করতে না চাইলে 'skip' লিখে পাঠান।*"
+        "`বাটন নাম | লিংক | কালার`\n\n"
+        "**কালার অপশনসমূহ:**\n"
+        "🔴 `red` (লাল)\n"
+        "🟢 `green` (সবুজ)\n"
+        "🔵 `blue` (নীল)\n"
+        "⚪ `white` (সাদা)\n\n"
+        "**উদাহরণ:**\n"
+        "`ইউটিউব চ্যানেল | https://youtube.com | red`\n"
+        "`গ্রুপে জয়েন করুন | https://t.me/TRADER_RAJ10 | green`\n\n"
+        "💡 *কালার না দিতে চাইলে শুধু নাম ও লিংক দিলেই হবে (ডিফল্ট কালার পাবে)। কোনো বাটন না চাইলে 'skip' লিখে পাঠান।*",
+        parse_mode="Markdown"
     )
     bot.register_next_step_handler(msg, process_post_buttons)
 
@@ -181,12 +189,28 @@ def process_post_buttons(message):
                 if len(parts) >= 2:
                     btn_text = parts[0].strip()
                     btn_url = parts[1].strip()
+                    
                     # লিংকে স্কিম (https://) না থাকলে স্বয়ংক্রিয়ভাবে যোগ করা
                     if not (btn_url.startswith('http://') or btn_url.startswith('https://')):
                         btn_url = 'https://' + btn_url
                     
+                    btn_style = None
+                    if len(parts) >= 3:
+                        color_input = parts[2].strip().lower()
+                        if color_input in ['red', 'danger', 'r']:
+                            btn_style = 'danger'
+                            btn_text = "🔴 " + btn_text
+                        elif color_input in ['green', 'success', 'g']:
+                            btn_style = 'success'
+                            btn_text = "🟢 " + btn_text
+                        elif color_input in ['blue', 'primary', 'b']:
+                            btn_style = 'primary'
+                            btn_text = "🔵 " + btn_text
+                        elif color_input in ['white', 'w']:
+                            btn_text = "⚪ " + btn_text
+                            
                     if is_valid_url(btn_url):
-                        buttons.append({'text': btn_text, 'url': btn_url})
+                        buttons.append({'text': btn_text, 'url': btn_url, 'style': btn_style})
     
     user_data[chat_id]['buttons'] = buttons
     
@@ -222,7 +246,18 @@ def handle_callback(call):
         post_markup = types.InlineKeyboardMarkup()
         for btn in post_info.get('buttons', []):
             try:
-                post_markup.add(types.InlineKeyboardButton(text=btn['text'], url=btn['url']))
+                # TeleBot-এর নতুন ভার্সন অনুযায়ী কালার বাটন স্টাইল যোগ করা হচ্ছে
+                post_markup.add(types.InlineKeyboardButton(
+                    text=btn['text'], 
+                    url=btn['url'], 
+                    style=btn.get('style')
+                ))
+            except TypeError:
+                # যদি কোনো কারণে সার্ভারের পাইথন লাইব্রেরি পুরোনো হয়, তবে সাধারণ বাটন তৈরি করবে
+                post_markup.add(types.InlineKeyboardButton(
+                    text=btn['text'], 
+                    url=btn['url']
+                ))
             except Exception:
                 continue
             
